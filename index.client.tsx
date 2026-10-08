@@ -1,4 +1,7 @@
-import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
+import type {
+  PluginButtonRegistration,
+  PluginClientContext,
+} from "@getpaseo/plugin/client";
 import { BudgetPopover } from "./client/popover";
 import { budgetRpc, pillLabel } from "./shared/budget";
 
@@ -7,7 +10,10 @@ const MIN_GAP_MS = 15_000;
 
 // One composer pill per agent with the budget left on its provider's CPA key.
 export default function contribute(client: PluginClientContext) {
-  const pills = new Map<string, { reg: PluginButtonRegistration; provider: string }>();
+  const pills = new Map<
+    string,
+    { reg: PluginButtonRegistration; provider: string }
+  >();
   const labels = new Map<string, string | null>();
   const fetchedAt = new Map<string, number>();
   const lifetime = new AbortController();
@@ -17,7 +23,10 @@ export default function contribute(client: PluginClientContext) {
     const label = labels.get(provider) ?? null;
     for (const pill of pills.values()) {
       // Paseo rejects an empty label: keep the last one while hidden.
-      if (pill.provider === provider) pill.reg.update(label === null ? { visible: false } : { visible: true, label });
+      if (pill.provider === provider)
+        pill.reg.update(
+          label === null ? { visible: false } : { visible: true, label },
+        );
     }
   };
 
@@ -26,30 +35,44 @@ export default function contribute(client: PluginClientContext) {
     if (!force && Date.now() - last < MIN_GAP_MS) return apply(provider);
     fetchedAt.set(provider, Date.now());
     try {
-      labels.set(provider, pillLabel(await client.rpc(budgetRpc, { provider })));
+      labels.set(
+        provider,
+        pillLabel(await client.rpc(budgetRpc, { provider })),
+      );
     } catch (error) {
       console.error("cpa-budget refresh failed", error);
     }
     if (!stopped) apply(provider);
   };
 
-  const register = (agent: { id: string; workspaceId?: string | null; provider?: string | null }) => {
+  const register = (agent: {
+    id: string;
+    workspaceId?: string | null;
+    provider?: string | null;
+  }) => {
     if (stopped || !agent.workspaceId || !agent.provider) return;
     const existing = pills.get(agent.id);
-    if (existing?.provider === agent.provider) return void refresh(agent.provider);
+    if (existing?.provider === agent.provider)
+      return void refresh(agent.provider);
     existing?.reg.remove();
-    const reg = client.addComposerPill({
-      id: "cpa-budget",
-      workspaceId: agent.workspaceId,
-      agentId: agent.id,
-      button: {
-        title: "Budget della chiave CPA",
-        icon: "Gauge",
-        label: "Budget",
-        visible: false,
-        behavior: { kind: "popover", Content: BudgetPopover },
-      },
-    });
+    let reg: PluginButtonRegistration;
+    try {
+      reg = client.addComposerPill({
+        id: "cpa-budget",
+        workspaceId: agent.workspaceId,
+        agentId: agent.id,
+        button: {
+          title: "Budget della chiave CPA",
+          icon: "Gauge",
+          label: "Budget",
+          visible: false,
+          behavior: { kind: "popover", Content: BudgetPopover },
+        },
+      });
+    } catch (error) {
+      // One rejected pill must not stop the others.
+      return console.error("cpa-budget: pill rejected", agent.id, error);
+    }
     pills.set(agent.id, { reg, provider: agent.provider });
     void refresh(agent.provider);
   };
@@ -78,11 +101,13 @@ export default function contribute(client: PluginClientContext) {
       return undefined;
     })
     .catch((error) => {
-      if (!stopped) console.error("cpa-budget: agent observation failed", error);
+      if (!stopped)
+        console.error("cpa-budget: agent observation failed", error);
     });
 
   const timer = setInterval(() => {
-    for (const provider of new Set([...pills.values()].map((p) => p.provider))) void refresh(provider, true);
+    for (const provider of new Set([...pills.values()].map((p) => p.provider)))
+      void refresh(provider, true);
   }, REFRESH_MS);
 
   return () => {
