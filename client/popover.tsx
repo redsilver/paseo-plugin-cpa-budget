@@ -59,7 +59,6 @@ export function BudgetPopover(props: PluginButtonContentProps) {
           </View>
         );
       })}
-      <Text style={styles.muted}>Valori a listino, calcolati dal proxy CPA.</Text>
     </View>
   );
 }
