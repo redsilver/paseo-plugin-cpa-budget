@@ -1,0 +1,6 @@
+{
+  "id": "cpa-budget",
+  "requirements": {
+    "paseo": ">=0.10.2"
+  }
+}
