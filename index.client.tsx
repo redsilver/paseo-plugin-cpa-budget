@@ -16,7 +16,8 @@ export default function contribute(client: PluginClientContext) {
   const apply = (provider: string) => {
     const label = labels.get(provider) ?? null;
     for (const pill of pills.values()) {
-      if (pill.provider === provider) pill.reg.update({ visible: label !== null, label: label ?? "" });
+      // Paseo rejects an empty label: keep the last one while hidden.
+      if (pill.provider === provider) pill.reg.update(label === null ? { visible: false } : { visible: true, label });
     }
   };
 
@@ -44,7 +45,7 @@ export default function contribute(client: PluginClientContext) {
       button: {
         title: "Budget della chiave CPA",
         icon: "Gauge",
-        label: "",
+        label: "Budget",
         visible: false,
         behavior: { kind: "popover", Content: BudgetPopover },
       },
