@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "check": "node --experimental-strip-types --no-warnings shared/budget.check.ts"
+    "check": "node --experimental-strip-types --no-warnings shared/budget.check.ts && node --experimental-strip-types --no-warnings shared/models.check.ts"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.10.2",
