@@ -21,13 +21,16 @@ const served = [
 const rule = { models: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "gpt-6.1-sol"], denied_models: ["gpt-6-astra"] };
 
 const claude = syncedModels("claude", served, rule);
-assert.deepEqual(claude.map((m) => m.id), ["claude-haiku-5-5", "claude-sonnet-5-5[1m]", "claude-opus-5-5[1m]"]);
+assert.deepEqual(claude.map((m) => m.id), ["claude-haiku-5-5[1m]", "claude-sonnet-5-5[1m]", "claude-opus-5-5[1m]"]);
 assert.equal(claude.find((m) => m.isDefault)?.id, "claude-sonnet-5-5[1m]");
 assert.equal(claude[0].thinkingOptions, undefined);
 
 const codex = syncedModels("codex", served, rule);
 assert.deepEqual(codex.map((m) => m.id), ["gpt-6.1-sol"]);
 assert.deepEqual(codex[0].thinkingOptions?.map((o) => o.id), ["low", "medium", "high", "xhigh"]);
+
+// Haiku 4.x has 200K tokens: no [1m].
+assert.deepEqual(syncedModels("claude", [{ id: "claude-haiku-4-5" }], {}).map((m) => m.id), ["claude-haiku-4-5"]);
 
 // No rule: every chat model, dated snapshots left out.
 assert.deepEqual(syncedModels("claude", served, {}).map((m) => m.id).at(-1), "claude-fable-5-1[1m]");
@@ -37,5 +40,5 @@ const kept = syncedModels("claude", served, rule, [
   { id: "claude-opus-5-5[1m]", label: "Opus mio", isDefault: true },
   { id: "claude-fable-5-1[1m]", label: "Fable" },
 ]);
-assert.deepEqual(kept.map((m) => [m.label, Boolean(m.isDefault)]), [["Haiku 5.5", false], ["Sonnet 5.5 · 1M", false], ["Opus mio", true]]);
+assert.deepEqual(kept.map((m) => [m.label, Boolean(m.isDefault)]), [["Haiku 5.5 · 1M", false], ["Sonnet 5.5 · 1M", false], ["Opus mio", true]]);
 console.log("ok");

@@ -43,7 +43,7 @@ Add `"CPA_MODELS": "auto"` to a provider's `env` and the plugin replaces its `mo
 
 - the server's `/v1/models`, minus the models the key's cpa-key-billing routing rule allows or denies (`/v0/resource/plugins/cpa-key-billing/routing`);
 - chat models of the provider's family only: `claude-*` for `extends: "claude"`, `gpt-*` without `gpt-image-*` for `extends: "codex"`; dated snapshots (`…-20250514`) are left out;
-- newest first; Claude models other than Haiku get the `[1m]` suffix (1M context in Claude Code); Codex models get the `low`/`medium`/`high`/`xhigh` effort levels, Paseo adds Claude's by itself;
+- newest first; Claude models get the `[1m]` suffix (1M context in Claude Code), except Haiku 4.x (200K); Codex models get the `low`/`medium`/`high`/`xhigh` effort levels, Paseo adds Claude's by itself;
 - an entry already in the list keeps its label and `isDefault`, so a hand edit survives; without a default, the newest non-Haiku model becomes it.
 
 The sync runs when a Paseo app connects and then every 5 minutes, and only writes when the list changed (a merge patch on `agents.providers.<id>.models`: the key is untouched). A new model therefore reaches the picker within 5 minutes of being listed or allowed on the server. An empty or failed answer leaves the list as it is; failures go to `paseo plugin logs cpa-budget`.

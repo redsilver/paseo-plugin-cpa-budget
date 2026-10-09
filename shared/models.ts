@@ -64,8 +64,8 @@ export function syncedModels(
   const models = served
     .filter((m) => usable(family, m.id, routing))
     .sort((a, b) => (b.created ?? 0) - (a.created ?? 0))
-    // ponytail: every non-Haiku Claude model gets the 1M context; list both variants if an older one lacks it.
-    .map(({ id }) => (family === "claude" && !/haiku/i.test(id) ? `${id}[1m]` : id))
+    // 1M context on every undated Claude model (4.6 and later, Haiku 5.5 included) but Haiku 4.x.
+    .map(({ id }) => (family === "claude" && !/haiku-4/i.test(id) ? `${id}[1m]` : id))
     .map((id): ProfileModel => ({
       id,
       label: modelLabel(id),
