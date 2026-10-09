@@ -5,6 +5,7 @@ Shows, in every [Paseo](https://paseo.sh) agent, how much of its API key budget 
 - A composer pill per agent: the used share of each quota window (`5h 12% · sett 3%`), or when the exhausted one resets (`Esaurito fino alle 17:18`).
 - Tap it for the plan name and, per window, a progress bar, spent and limit in USD, what is left and when it resets.
 - Refreshes every minute. Hidden when the key has no plan, the provider has no CPA key, or the proxy has no cpa-key-billing.
+- Optionally keeps the provider's model list in step with the server, with a reasoning effort selector on every model.
 
 The UI text is in Italian.
 
@@ -35,6 +36,44 @@ Example provider:
   }
 }
 ```
+
+## Model list from the server
+
+Add `"CPA_MODELS": "auto"` to a provider's `env` and the plugin replaces its `models` with what the key may use:
+
+- the server's `/v1/models`, minus the models the key's cpa-key-billing routing rule allows or denies (`/v0/resource/plugins/cpa-key-billing/routing`);
+- chat models of the provider's family only: `claude-*` for `extends: "claude"`, `gpt-*` without `gpt-image-*` for `extends: "codex"`; dated snapshots (`…-20250514`) are left out;
+- newest first; Claude models other than Haiku get the `[1m]` suffix (1M context in Claude Code); Codex models get the `low`/`medium`/`high`/`xhigh` effort levels, Paseo adds Claude's by itself;
+- an entry already in the list keeps its label and `isDefault`, so a hand edit survives; without a default, the newest non-Haiku model becomes it.
+
+The sync runs when a Paseo app connects and then every 5 minutes, and only writes when the list changed (a merge patch on `agents.providers.<id>.models`: the key is untouched). A new model therefore reaches the picker within 5 minutes of being listed or allowed on the server. An empty or failed answer leaves the list as it is; failures go to `paseo plugin logs cpa-budget`.
+
+Example: one provider per family, configured once.
+
+```json
+"claude-team": {
+  "extends": "claude",
+  "label": "Claude (team)",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://cpa.example.com/api",
+    "ANTHROPIC_AUTH_TOKEN": "sk-…",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5",
+    "CPA_MODELS": "auto"
+  }
+},
+"codex-team": {
+  "extends": "codex",
+  "label": "Codex (team)",
+  "env": {
+    "OPENAI_BASE_URL": "https://cpa.example.com/api/v1",
+    "OPENAI_API_KEY": "sk-…",
+    "CPA_MODELS": "auto"
+  }
+}
+```
+
+`ANTHROPIC_DEFAULT_HAIKU_MODEL` matters when the routing rule allows only some Haiku: Claude Code sends its background requests to Haiku 4.5 otherwise.
 
 ## Install
 

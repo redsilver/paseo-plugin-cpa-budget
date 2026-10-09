@@ -4,9 +4,11 @@ import type {
 } from "@getpaseo/plugin/client";
 import { BudgetPopover } from "./client/popover";
 import { budgetRpc, pillLabel } from "./shared/budget";
+import { syncModelsRpc } from "./shared/models";
 
 const REFRESH_MS = 60_000;
 const MIN_GAP_MS = 15_000;
+const MODELS_MS = 5 * 60_000;
 
 // One composer pill per agent with the budget left on its provider's CPA key.
 export default function contribute(client: PluginClientContext) {
@@ -110,9 +112,16 @@ export default function contribute(client: PluginClientContext) {
       void refresh(provider, true);
   }, REFRESH_MS);
 
+  // ponytail: runs only while a Paseo app is connected; the daemon has no timer of its own here.
+  const syncModels = () =>
+    client.rpc(syncModelsRpc, {}).catch((error) => console.error("cpa-budget: model sync failed", error));
+  void syncModels();
+  const modelsTimer = setInterval(syncModels, MODELS_MS);
+
   return () => {
     stopped = true;
     clearInterval(timer);
+    clearInterval(modelsTimer);
     lifetime.abort();
     for (const pill of pills.values()) pill.reg.remove();
     pills.clear();
