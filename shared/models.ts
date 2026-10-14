@@ -15,7 +15,7 @@ export type ProfileModel = { id: string; label: string; isDefault?: boolean; thi
 export type Routing = { models?: string[]; denied_models?: string[] };
 
 // A model of the server's catalog: context window and effort levels when the server tells them
-// (efforts undefined: not told; empty: a model without reasoning).
+// (efforts undefined: not told; empty: a model without reasoning, stored as thinkingOptions: []).
 export type ServedModel = { id: string; created?: number; contextWindow?: number; efforts?: string[]; defaultEffort?: string };
 
 // Paseo knows Claude's effort levels on its own, not those of a custom Codex model: they come from
@@ -80,12 +80,13 @@ export function syncedModels(
     .map((m): ProfileModel => {
       const id = family === "claude" && longContext(m) ? `${m.id}[1m]` : m.id;
       const { thinkingOptions: oldEfforts, ...old } = kept.get(id) ?? kept.get(id === m.id ? `${m.id}[1m]` : m.id) ?? ({} as Partial<ProfileModel>);
-      // Codex: the server's levels; without them, the entry's own, else the fixed ones.
+      // Codex: the server's levels, [] for a model without reasoning (kept as such, so a later sync
+      // without the catalog does not bring levels back); without them, the entry's own, else the fixed ones.
       const thinkingOptions =
         family !== "codex"
           ? oldEfforts
           : m.efforts
-            ? m.efforts.length > 0 ? effortOptions(m.efforts, m.defaultEffort) : undefined
+            ? m.efforts.length > 0 ? effortOptions(m.efforts, m.defaultEffort) : []
             : (oldEfforts ?? effortOptions(CODEX_EFFORTS));
       return {
         ...old,

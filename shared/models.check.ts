@@ -85,5 +85,7 @@ assert.deepEqual(moved.map((m) => [m.id, m.label, Boolean(m.isDefault)]), [
 assert.equal((moved[0] as any).description, "x");
 // A model without reasoning loses its levels; levels of a model the catalog says nothing about stay.
 const plain = syncedModels("codex", [{ id: "gpt-6.1-sol", efforts: [] }, { id: "gpt-new", efforts: [] }], {}, synced);
-assert.deepEqual(plain.map((m) => m.thinkingOptions), [undefined, undefined]);
+assert.deepEqual(plain.map((m) => m.thinkingOptions), [[], []]);
+// …and stays without levels when a later sync has no catalog.
+assert.deepEqual(syncedModels("codex", [{ id: "gpt-new" }], {}, plain)[0].thinkingOptions, []);
 console.log("ok");
