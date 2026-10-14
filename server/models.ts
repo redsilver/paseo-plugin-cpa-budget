@@ -21,28 +21,31 @@ async function getJson(url: string, key: string, headers: Record<string, string>
 // Codex catalog (context_window, reasoning levels, no date) when asked with client_version.
 async function servedModels(family: Family, url: string, key: string): Promise<ServedModel[]> {
   if (family === "claude") {
-    const { data = [] } = (await getJson(url, key, { "anthropic-version": "2023-06-01" })) ?? {};
-    return data
+    const body = await getJson(url, key, { "anthropic-version": "2023-06-01" });
+    // A partial list would drop the models of the next pages: better no sync at all.
+    if (body?.has_more) throw new Error(`${url}: paginated answer`);
+    return (Array.isArray(body?.data) ? body.data : [])
       // The Anthropic list also carries the GPT models under cloaked claude-… ids.
       .filter((m: any) => m.owned_by !== "openai")
       .map((m: any) => ({
         id: m.id,
         created: Date.parse(m.created_at) / 1000 || m.created,
-        contextWindow: m.max_input_tokens,
+        contextWindow: typeof m.max_input_tokens === "number" ? m.max_input_tokens : undefined,
       }));
   }
   const [list, catalog] = await Promise.all([
     getJson(url, key),
     getJson(`${url}?client_version=1.0.0`, key).catch(() => null), // effort levels are an extra
   ]);
-  const entries = new Map<string, any>((catalog?.models ?? []).map((m: any) => [m.slug, m]));
-  return (list?.data ?? []).map((m: any) => {
+  const entries = new Map<string, any>((Array.isArray(catalog?.models) ? catalog.models : []).map((m: any) => [m?.slug, m]));
+  return (Array.isArray(list?.data) ? list.data : []).map((m: any) => {
     const entry = entries.get(m.id);
+    const levels = Array.isArray(entry?.supported_reasoning_levels) ? entry.supported_reasoning_levels : [];
     return {
       id: m.id,
       created: m.created,
-      efforts: entry?.supported_reasoning_levels?.map((l: any) => l.effort).filter(Boolean),
-      defaultEffort: entry?.default_reasoning_level,
+      efforts: levels.map((l: any) => l?.effort).filter((e: unknown): e is string => typeof e === "string"),
+      defaultEffort: typeof entry?.default_reasoning_level === "string" ? entry.default_reasoning_level : undefined,
     };
   });
 }

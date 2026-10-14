@@ -33,10 +33,10 @@ const listed = (list: string[] | undefined, id: string) =>
   (list ?? []).some((m) => [id, baseId(id)].some((x) => m.toLowerCase() === x.toLowerCase()));
 const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
-// The server's effort levels with its default, else medium.
+// The server's effort levels with its default, else medium, else the first.
 function effortOptions({ efforts, defaultEffort }: ServedModel): ThinkingOption[] {
   const ids = efforts?.length ? efforts : CODEX_EFFORTS;
-  const preferred = ids.includes(defaultEffort ?? "") ? defaultEffort : "medium";
+  const preferred = [defaultEffort, "medium", ids[0]].find((e) => e && ids.includes(e));
   return ids.map((id) => ({ id, label: EFFORT_LABELS[id] ?? cap(id), ...(id === preferred ? { isDefault: true } : {}) }));
 }
 
@@ -64,8 +64,9 @@ export function modelLabel(id: string): string {
   return [name, slash >= 0 ? id.slice(0, slash) : "", id.endsWith("[1m]") ? "1M" : ""].filter(Boolean).join(" · ");
 }
 
-// The provider's model list from the server's, newest first. Entries already configured keep
-// their label and default, so a hand edit survives the next sync; effort levels follow the server.
+// The provider's model list from the server's, newest first. Entries already configured keep their
+// settings, also when the [1m] suffix comes or goes, so a hand edit survives the next sync; a
+// generated label follows the id, and Codex effort levels follow the server whenever it lists them.
 export function syncedModels(
   family: Family,
   served: ServedModel[],
@@ -78,12 +79,13 @@ export function syncedModels(
     .sort((a, b) => (b.created ?? 0) - (a.created ?? 0))
     .map((m): ProfileModel => {
       const id = family === "claude" && longContext(m) ? `${m.id}[1m]` : m.id;
-      const old = kept.get(id);
+      const old = kept.get(id) ?? kept.get(id === m.id ? `${m.id}[1m]` : m.id);
+      const efforts = family === "codex" && (m.efforts?.length || !old?.thinkingOptions);
       return {
+        ...old,
         id,
-        label: old?.label ?? modelLabel(id),
-        ...(old?.isDefault ? { isDefault: true } : {}),
-        ...(family === "codex" ? { thinkingOptions: effortOptions(m) } : {}),
+        label: old && old.label !== modelLabel(old.id) ? old.label : modelLabel(id),
+        ...(efforts ? { thinkingOptions: effortOptions(m) } : {}),
       };
     });
   if (models.some((m) => m.isDefault)) return models;

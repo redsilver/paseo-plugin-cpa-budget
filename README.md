@@ -45,7 +45,8 @@ Add `"CPA_MODELS": "auto"` to a provider's `env` and the plugin replaces its `mo
 - chat models of the provider's family only: `claude-*` for `extends: "claude"`, `gpt-*` without `gpt-image-*` for `extends: "codex"`; dated snapshots (`…-20250514`) are left out;
 - newest first; Claude models with a 1M context window (`max_input_tokens` of the Anthropic-format list) get the `[1m]` suffix (1M context in Claude Code); Codex models get the effort levels and default of the server's Codex catalog (`/v1/models?client_version=…`), `low` to `xhigh` when it has none; Paseo adds Claude's levels by itself;
 - the Anthropic-format list also carries the GPT models under cloaked `claude-…` ids (`owned_by: "openai"`): they are left out;
-- an entry already in the list keeps its label and `isDefault`, so a hand edit survives; its effort levels follow the server; without a default, the newest non-Haiku model becomes it.
+- an entry already in the list keeps its settings, also when the `[1m]` suffix comes or goes, so a hand edit survives; a generated label follows the id, and Codex effort levels follow the server whenever its catalog lists them; without a default, the newest non-Haiku model becomes it;
+- a paginated Anthropic list is not synced, rather than cut to its first page.
 
 The sync runs when a Paseo app connects and then every 5 minutes, and only writes when the list changed (a merge patch on `agents.providers.<id>.models`: the key is untouched). A new model therefore reaches the picker within 5 minutes of being listed or allowed on the server. An empty or failed answer leaves the list as it is; failures go to `paseo plugin logs cpa-budget`.
 
@@ -84,7 +85,7 @@ Requires Paseo 0.10.2 or later with plugins enabled, and a CPA with cpa-key-bill
 paseo plugin install git:redsilver/paseo-plugin-cpa-budget
 ```
 
-Installed from Git, the plugin keeps itself up to date: a minute after the daemon starts and then every 6 hours it runs `paseo plugin update cpa-budget --yes`, which moves it to the head of `main`. A directory install is skipped by Paseo and never updates.
+Installed from Git, the plugin keeps itself up to date: a minute after the daemon starts and then every 6 hours it runs `paseo plugin update <id> --yes` for every Git installation of this repository, which moves it to the head of `main`. A directory install never updates.
 
 To work on it, clone the repository, `npm install`, `paseo plugin install "$PWD"`. After a change: `npm run check` (self-check of the parsing and the pill text), `npm run typecheck`, then `paseo plugin reload cpa-budget`.
 

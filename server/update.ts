@@ -1,36 +1,44 @@
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { execFile, spawn } from "node:child_process";
 
 const FIRST_MS = 60_000;
 const EVERY_MS = 6 * 60 * 60_000;
+const REPOSITORY = /\/paseo-plugin-cpa-budget(\.git)?\/?$/;
 
-// The paseo CLI of the app running this plugin (macOS bundle, Windows install), else the one on PATH.
-function paseoBin(): string {
-  const exe = process.execPath;
-  const app = exe.match(/^(.*?\.app)\//)?.[1];
-  const candidates = [
-    app && join(app, "Contents", "Resources", "bin", "paseo"),
-    join(dirname(exe), "resources", "bin", "paseo.cmd"),
-    join(dirname(exe), "resources", "bin", "paseo"),
-  ];
-  return candidates.find((c): c is string => Boolean(c) && existsSync(c!)) ?? "paseo";
+// The daemon gives its plugins the CLI path and home. On Windows the CLI is a .cmd, which runs only
+// through a shell: there every argument is quoted, as paths may hold spaces.
+const windows = process.platform === "win32";
+const quote = (arg: string) => (windows ? `"${arg}"` : arg);
+const cli = quote(process.env.PASEO_CLI || "paseo");
+const home = process.env.PASEO_HOME ? ["--home", process.env.PASEO_HOME] : [];
+const options = { shell: windows, windowsHide: true };
+
+// Ids of the Git installations of this repository, whatever id they were installed under.
+function gitInstalls(listing: string): string[] {
+  const plugins = JSON.parse(listing);
+  return (Array.isArray(plugins) ? plugins : [])
+    .filter((p) => p?.installation?.identity?.kind === "git" && REPOSITORY.test(p.installation.identity.remote ?? ""))
+    .map((p) => String(p.id));
 }
 
-// Asks the daemon to update this plugin from its Git source to the remote's HEAD; a directory
-// install is skipped by Paseo itself. Detached: the update restarts this process.
-// ponytail: CLI output is dropped; `paseo plugin update cpa-budget --check` shows what is pending.
+// Asks the daemon to move each Git installation to the remote's HEAD; directory installs are left
+// alone. Detached: the update restarts this process.
+// ponytail: CLI output is dropped; `paseo plugin update <id> --check` shows what is pending.
 function update() {
-  const bin = paseoBin();
-  const windows = process.platform === "win32";
-  const child = spawn(windows ? `"${bin}"` : bin, ["plugin", "update", "cpa-budget", "--yes"], {
-    detached: true,
-    stdio: "ignore",
-    shell: windows, // a .cmd needs a shell
-    windowsHide: true,
+  const ls = ["plugin", "ls", "--json", ...home].map(quote);
+  execFile(cli, ls, { ...options, timeout: 30_000 }, (error, stdout) => {
+    let ids: string[];
+    try {
+      if (error) throw error;
+      ids = gitInstalls(stdout);
+    } catch (failure) {
+      return console.error(`cpa-budget: self-update check failed: ${String(failure)}`);
+    }
+    for (const id of ids) {
+      const child = spawn(cli, ["plugin", "update", id, "--yes", ...home].map(quote), { ...options, detached: true, stdio: "ignore" });
+      child.on("error", (failure) => console.error(`cpa-budget: self-update of ${id} failed: ${String(failure)}`));
+      child.unref();
+    }
   });
-  child.on("error", (error) => console.error(`cpa-budget: self-update failed: ${String(error)}`));
-  child.unref();
 }
 
 export function scheduleUpdates(): () => void {

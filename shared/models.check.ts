@@ -61,4 +61,26 @@ assert.deepEqual(
   syncedModels("codex", [{ ...sol, defaultEffort: "none" }], {})[0].thinkingOptions?.filter((o) => o.isDefault).map((o) => o.id),
   ["medium"],
 );
+// No default on the server and no medium: the first level.
+assert.deepEqual(
+  syncedModels("codex", [{ id: "gpt-x", efforts: ["low", "high"] }], {})[0].thinkingOptions?.filter((o) => o.isDefault).map((o) => o.id),
+  ["low"],
+);
+
+// Without the catalog an entry keeps the effort levels it has; a new one gets the fixed ones.
+const offline = syncedModels("codex", [{ id: "gpt-6.1-sol" }, { id: "gpt-new" }], {}, synced);
+assert.deepEqual(offline[0].thinkingOptions, synced[0].thinkingOptions);
+assert.deepEqual(offline[1].thinkingOptions?.map((o) => o.id), ["low", "medium", "high", "xhigh"]);
+
+// The [1m] suffix coming or going keeps label, default and the other fields of the entry;
+// a generated label follows the new id.
+const moved = syncedModels("claude", [{ id: "claude-sonnet-4-6", contextWindow: 200_000 }, { id: "claude-haiku-5-5", contextWindow: 1_000_000 }], {}, [
+  { id: "claude-sonnet-4-6[1m]", label: "Sonnet mio", isDefault: true, description: "x" } as any,
+  { id: "claude-haiku-5-5", label: "Haiku 5.5" },
+]);
+assert.deepEqual(moved.map((m) => [m.id, m.label, Boolean(m.isDefault)]), [
+  ["claude-sonnet-4-6", "Sonnet mio", true],
+  ["claude-haiku-5-5[1m]", "Haiku 5.5 · 1M", false],
+]);
+assert.equal((moved[0] as any).description, "x");
 console.log("ok");
