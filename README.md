@@ -43,8 +43,9 @@ Add `"CPA_MODELS": "auto"` to a provider's `env` and the plugin replaces its `mo
 
 - the server's `/v1/models`, minus the models the key's cpa-key-billing routing rule allows or denies (`/v0/resource/plugins/cpa-key-billing/routing`);
 - chat models of the provider's family only: `claude-*` for `extends: "claude"`, `gpt-*` without `gpt-image-*` for `extends: "codex"`; dated snapshots (`…-20250514`) are left out;
-- newest first; Claude models get the `[1m]` suffix (1M context in Claude Code), except Haiku 4.x (200K); Codex models get the `low`/`medium`/`high`/`xhigh` effort levels, Paseo adds Claude's by itself;
-- an entry already in the list keeps its label and `isDefault`, so a hand edit survives; without a default, the newest non-Haiku model becomes it.
+- newest first; Claude models with a 1M context window (`max_input_tokens` of the Anthropic-format list) get the `[1m]` suffix (1M context in Claude Code); Codex models get the effort levels and default of the server's Codex catalog (`/v1/models?client_version=…`), `low` to `xhigh` when it has none; Paseo adds Claude's levels by itself;
+- the Anthropic-format list also carries the GPT models under cloaked `claude-…` ids (`owned_by: "openai"`): they are left out;
+- an entry already in the list keeps its label and `isDefault`, so a hand edit survives; its effort levels follow the server; without a default, the newest non-Haiku model becomes it.
 
 The sync runs when a Paseo app connects and then every 5 minutes, and only writes when the list changed (a merge patch on `agents.providers.<id>.models`: the key is untouched). A new model therefore reaches the picker within 5 minutes of being listed or allowed on the server. An empty or failed answer leaves the list as it is; failures go to `paseo plugin logs cpa-budget`.
 
@@ -80,13 +81,12 @@ Example: one provider per family, configured once.
 Requires Paseo 0.10.2 or later with plugins enabled, and a CPA with cpa-key-billing where the key is bound to a subscription plan with USD windows.
 
 ```sh
-git clone https://github.com/redsilver/paseo-plugin-cpa-budget
-cd paseo-plugin-cpa-budget
-npm install
-paseo plugin install "$PWD"
+paseo plugin install git:redsilver/paseo-plugin-cpa-budget
 ```
 
-After a change: `npm run check` (self-check of the parsing and the pill text), `npm run typecheck`, then `paseo plugin reload cpa-budget`.
+Installed from Git, the plugin keeps itself up to date: a minute after the daemon starts and then every 6 hours it runs `paseo plugin update cpa-budget --yes`, which moves it to the head of `main`. A directory install is skipped by Paseo and never updates.
+
+To work on it, clone the repository, `npm install`, `paseo plugin install "$PWD"`. After a change: `npm run check` (self-check of the parsing and the pill text), `npm run typecheck`, then `paseo plugin reload cpa-budget`.
 
 ## License
 
