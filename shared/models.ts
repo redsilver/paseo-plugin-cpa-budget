@@ -14,13 +14,13 @@ export type ProfileModel = { id: string; label: string; isDefault?: boolean; thi
 // The key's cpa-key-billing routing rule: allowed (empty = all) and denied models.
 export type Routing = { models?: string[]; denied_models?: string[] };
 
-// Paseo knows Claude's effort levels on its own, not those of a custom Codex model.
-const CODEX_EFFORT: ThinkingOption[] = [
-  { id: "low", label: "Low" },
-  { id: "medium", label: "Medium", isDefault: true },
-  { id: "high", label: "High" },
-  { id: "xhigh", label: "XHigh" },
-];
+// A model of the server's catalog: context window and effort levels when the server tells them.
+export type ServedModel = { id: string; created?: number; contextWindow?: number; efforts?: string[]; defaultEffort?: string };
+
+// Paseo knows Claude's effort levels on its own, not those of a custom Codex model: they come from
+// the server's Codex catalog, these only when it has none for the model.
+const CODEX_EFFORTS = ["low", "medium", "high", "xhigh"];
+const EFFORT_LABELS: Record<string, string> = { xhigh: "XHigh" };
 
 // <base>/v1/models whether the base URL is the Anthropic one (…/api) or the OpenAI one (…/api/v1).
 export function modelsUrl(base: string): string {
@@ -32,6 +32,18 @@ const baseId = (id: string) => id.slice(id.lastIndexOf("/") + 1);
 const listed = (list: string[] | undefined, id: string) =>
   (list ?? []).some((m) => [id, baseId(id)].some((x) => m.toLowerCase() === x.toLowerCase()));
 const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
+// The server's effort levels with its default, else medium.
+function effortOptions({ efforts, defaultEffort }: ServedModel): ThinkingOption[] {
+  const ids = efforts?.length ? efforts : CODEX_EFFORTS;
+  const preferred = ids.includes(defaultEffort ?? "") ? defaultEffort : "medium";
+  return ids.map((id) => ({ id, label: EFFORT_LABELS[id] ?? cap(id), ...(id === preferred ? { isDefault: true } : {}) }));
+}
+
+// 1M context in Claude Code takes the [1m] suffix. Without the server's context window: every
+// undated Claude model (4.6 and later, Haiku 5.5 included) but Haiku 4.x.
+const longContext = ({ id, contextWindow }: ServedModel) =>
+  contextWindow === undefined ? !/haiku-4/i.test(id) : contextWindow >= 1_000_000;
 
 // Chat models of the family that the key may use; dated snapshots and image models left out.
 function usable(family: Family, id: string, routing: Routing): boolean {
@@ -53,10 +65,10 @@ export function modelLabel(id: string): string {
 }
 
 // The provider's model list from the server's, newest first. Entries already configured keep
-// their label and default, so a hand edit survives the next sync.
+// their label and default, so a hand edit survives the next sync; effort levels follow the server.
 export function syncedModels(
   family: Family,
-  served: { id: string; created?: number }[],
+  served: ServedModel[],
   routing: Routing,
   current: ProfileModel[] = [],
 ): ProfileModel[] {
@@ -64,14 +76,16 @@ export function syncedModels(
   const models = served
     .filter((m) => usable(family, m.id, routing))
     .sort((a, b) => (b.created ?? 0) - (a.created ?? 0))
-    // 1M context on every undated Claude model (4.6 and later, Haiku 5.5 included) but Haiku 4.x.
-    .map(({ id }) => (family === "claude" && !/haiku-4/i.test(id) ? `${id}[1m]` : id))
-    .map((id): ProfileModel => ({
-      id,
-      label: modelLabel(id),
-      ...(family === "codex" ? { thinkingOptions: CODEX_EFFORT } : {}),
-      ...kept.get(id),
-    }));
+    .map((m): ProfileModel => {
+      const id = family === "claude" && longContext(m) ? `${m.id}[1m]` : m.id;
+      const old = kept.get(id);
+      return {
+        id,
+        label: old?.label ?? modelLabel(id),
+        ...(old?.isDefault ? { isDefault: true } : {}),
+        ...(family === "codex" ? { thinkingOptions: effortOptions(m) } : {}),
+      };
+    });
   if (models.some((m) => m.isDefault)) return models;
   // Haiku is the newest Claude often enough, but it is no default for coding.
   const first = Math.max(0, models.findIndex((m) => !/haiku/i.test(m.id)));

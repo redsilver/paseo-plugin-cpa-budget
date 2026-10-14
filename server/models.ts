@@ -1,19 +1,50 @@
 import type { PluginHandlerContext } from "@getpaseo/plugin/server";
 import { isDeepStrictEqual } from "node:util";
-import { type ProfileModel, modelsUrl, syncedModels } from "../shared/models";
+import { type Family, type ProfileModel, type ServedModel, modelsUrl, syncedModels } from "../shared/models";
 import { cpaAccess, readProviders } from "./config";
 
 // null when the CPA has no such resource (404) or the key is not tracked by it (401).
-async function getJson(url: string, key: string): Promise<any> {
+async function getJson(url: string, key: string, headers: Record<string, string> = {}): Promise<any> {
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), 10_000);
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${key}`, "User-Agent": "paseo-cpa-budget" },
+    headers: { Authorization: `Bearer ${key}`, "User-Agent": "paseo-cpa-budget", ...headers },
     signal: timeout.signal,
   }).finally(() => clearTimeout(timer));
   if (response.status === 404 || response.status === 401) return null;
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   return response.json();
+}
+
+// The server's models with their context window and effort levels. CPA answers /v1/models in the
+// Anthropic format (created_at, max_input_tokens) when asked with anthropic-version, and with the
+// Codex catalog (context_window, reasoning levels, no date) when asked with client_version.
+async function servedModels(family: Family, url: string, key: string): Promise<ServedModel[]> {
+  if (family === "claude") {
+    const { data = [] } = (await getJson(url, key, { "anthropic-version": "2023-06-01" })) ?? {};
+    return data
+      // The Anthropic list also carries the GPT models under cloaked claude-… ids.
+      .filter((m: any) => m.owned_by !== "openai")
+      .map((m: any) => ({
+        id: m.id,
+        created: Date.parse(m.created_at) / 1000 || m.created,
+        contextWindow: m.max_input_tokens,
+      }));
+  }
+  const [list, catalog] = await Promise.all([
+    getJson(url, key),
+    getJson(`${url}?client_version=1.0.0`, key).catch(() => null), // effort levels are an extra
+  ]);
+  const entries = new Map<string, any>((catalog?.models ?? []).map((m: any) => [m.slug, m]));
+  return (list?.data ?? []).map((m: any) => {
+    const entry = entries.get(m.id);
+    return {
+      id: m.id,
+      created: m.created,
+      efforts: entry?.supported_reasoning_levels?.map((l: any) => l.effort).filter(Boolean),
+      defaultEffort: entry?.default_reasoning_level,
+    };
+  });
 }
 
 export async function syncModels(_input: object, { paseo }: PluginHandlerContext) {
@@ -23,7 +54,7 @@ export async function syncModels(_input: object, { paseo }: PluginHandlerContext
     const access = cpaAccess(provider);
     if (provider.env?.CPA_MODELS !== "auto" || !access || (family !== "claude" && family !== "codex")) continue;
     try {
-      const served = (await getJson(modelsUrl(access.base), access.key))?.data ?? [];
+      const served = await servedModels(family, modelsUrl(access.base), access.key);
       const routing = (await getJson(`${new URL(access.base).origin}/v0/resource/plugins/cpa-key-billing/routing`, access.key)) ?? {};
       const models = syncedModels(family, served, routing, provider.models);
       // An empty answer must not wipe the model picker.

@@ -41,4 +41,24 @@ const kept = syncedModels("claude", served, rule, [
   { id: "claude-fable-5-1[1m]", label: "Fable" },
 ]);
 assert.deepEqual(kept.map((m) => [m.label, Boolean(m.isDefault)]), [["Haiku 5.5 · 1M", false], ["Sonnet 5.5 · 1M", false], ["Opus mio", true]]);
+// The server's context window decides the [1m] suffix when it gives one.
+assert.deepEqual(
+  syncedModels("claude", [{ id: "claude-sonnet-4-6", contextWindow: 200_000 }, { id: "claude-opus-4-6", contextWindow: 1_000_000 }], {}).map((m) => m.id),
+  ["claude-sonnet-4-6", "claude-opus-4-6[1m]"],
+);
+
+// Effort levels and default from the server's Codex catalog; the old ones do not stick.
+const sol = { id: "gpt-6.1-sol", efforts: ["low", "medium", "high", "xhigh", "max", "ultra"], defaultEffort: "low" };
+const synced = syncedModels("codex", [sol], {}, [
+  { id: "gpt-6.1-sol", label: "Sol", isDefault: true, thinkingOptions: [{ id: "low", label: "Low" }] },
+]);
+assert.deepEqual(synced[0].thinkingOptions?.map((o) => o.id), sol.efforts);
+assert.deepEqual(synced[0].thinkingOptions?.filter((o) => o.isDefault).map((o) => o.id), ["low"]);
+assert.equal(synced[0].thinkingOptions?.find((o) => o.id === "xhigh")?.label, "XHigh");
+assert.deepEqual([synced[0].label, synced[0].isDefault], ["Sol", true]);
+// A default the model lacks falls back to medium.
+assert.deepEqual(
+  syncedModels("codex", [{ ...sol, defaultEffort: "none" }], {})[0].thinkingOptions?.filter((o) => o.isDefault).map((o) => o.id),
+  ["medium"],
+);
 console.log("ok");
