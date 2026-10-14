@@ -14,7 +14,8 @@ export type ProfileModel = { id: string; label: string; isDefault?: boolean; thi
 // The key's cpa-key-billing routing rule: allowed (empty = all) and denied models.
 export type Routing = { models?: string[]; denied_models?: string[] };
 
-// A model of the server's catalog: context window and effort levels when the server tells them.
+// A model of the server's catalog: context window and effort levels when the server tells them
+// (efforts undefined: not told; empty: a model without reasoning).
 export type ServedModel = { id: string; created?: number; contextWindow?: number; efforts?: string[]; defaultEffort?: string };
 
 // Paseo knows Claude's effort levels on its own, not those of a custom Codex model: they come from
@@ -33,9 +34,8 @@ const listed = (list: string[] | undefined, id: string) =>
   (list ?? []).some((m) => [id, baseId(id)].some((x) => m.toLowerCase() === x.toLowerCase()));
 const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
-// The server's effort levels with its default, else medium, else the first.
-function effortOptions({ efforts, defaultEffort }: ServedModel): ThinkingOption[] {
-  const ids = efforts?.length ? efforts : CODEX_EFFORTS;
+// The effort levels with the server's default, else medium, else the first.
+function effortOptions(ids: string[], defaultEffort?: string): ThinkingOption[] {
   const preferred = [defaultEffort, "medium", ids[0]].find((e) => e && ids.includes(e));
   return ids.map((id) => ({ id, label: EFFORT_LABELS[id] ?? cap(id), ...(id === preferred ? { isDefault: true } : {}) }));
 }
@@ -79,13 +79,19 @@ export function syncedModels(
     .sort((a, b) => (b.created ?? 0) - (a.created ?? 0))
     .map((m): ProfileModel => {
       const id = family === "claude" && longContext(m) ? `${m.id}[1m]` : m.id;
-      const old = kept.get(id) ?? kept.get(id === m.id ? `${m.id}[1m]` : m.id);
-      const efforts = family === "codex" && (m.efforts?.length || !old?.thinkingOptions);
+      const { thinkingOptions: oldEfforts, ...old } = kept.get(id) ?? kept.get(id === m.id ? `${m.id}[1m]` : m.id) ?? ({} as Partial<ProfileModel>);
+      // Codex: the server's levels; without them, the entry's own, else the fixed ones.
+      const thinkingOptions =
+        family !== "codex"
+          ? oldEfforts
+          : m.efforts
+            ? m.efforts.length > 0 ? effortOptions(m.efforts, m.defaultEffort) : undefined
+            : (oldEfforts ?? effortOptions(CODEX_EFFORTS));
       return {
         ...old,
         id,
-        label: old && old.label !== modelLabel(old.id) ? old.label : modelLabel(id),
-        ...(efforts ? { thinkingOptions: effortOptions(m) } : {}),
+        label: old.label && old.id && old.label !== modelLabel(old.id) ? old.label : modelLabel(id),
+        ...(thinkingOptions ? { thinkingOptions } : {}),
       };
     });
   if (models.some((m) => m.isDefault)) return models;

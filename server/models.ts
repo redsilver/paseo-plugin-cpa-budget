@@ -16,6 +16,8 @@ async function getJson(url: string, key: string, headers: Record<string, string>
   return response.json();
 }
 
+const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
 // The server's models with their context window and effort levels. CPA answers /v1/models in the
 // Anthropic format (created_at, max_input_tokens) when asked with anthropic-version, and with the
 // Codex catalog (context_window, reasoning levels, no date) when asked with client_version.
@@ -40,12 +42,14 @@ async function servedModels(family: Family, url: string, key: string): Promise<S
   const entries = new Map<string, any>((Array.isArray(catalog?.models) ? catalog.models : []).map((m: any) => [m?.slug, m]));
   return (Array.isArray(list?.data) ? list.data : []).map((m: any) => {
     const entry = entries.get(m.id);
-    const levels = Array.isArray(entry?.supported_reasoning_levels) ? entry.supported_reasoning_levels : [];
+    const levels = entry?.supported_reasoning_levels;
+    const efforts = Array.isArray(levels) ? levels.map((l: any) => text(l?.effort)).filter(Boolean) : [];
     return {
       id: m.id,
       created: m.created,
-      efforts: levels.map((l: any) => l?.effort).filter((e: unknown): e is string => typeof e === "string"),
-      defaultEffort: typeof entry?.default_reasoning_level === "string" ? entry.default_reasoning_level : undefined,
+      // An empty list is a model without reasoning; a list with no usable level tells nothing.
+      efforts: Array.isArray(levels) && (levels.length === 0 || efforts.length > 0) ? efforts : undefined,
+      defaultEffort: text(entry?.default_reasoning_level) || undefined,
     };
   });
 }

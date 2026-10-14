@@ -83,4 +83,7 @@ assert.deepEqual(moved.map((m) => [m.id, m.label, Boolean(m.isDefault)]), [
   ["claude-haiku-5-5[1m]", "Haiku 5.5 · 1M", false],
 ]);
 assert.equal((moved[0] as any).description, "x");
+// A model without reasoning loses its levels; levels of a model the catalog says nothing about stay.
+const plain = syncedModels("codex", [{ id: "gpt-6.1-sol", efforts: [] }, { id: "gpt-new", efforts: [] }], {}, synced);
+assert.deepEqual(plain.map((m) => m.thinkingOptions), [undefined, undefined]);
 console.log("ok");

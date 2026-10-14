@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 
 const FIRST_MS = 60_000;
 const EVERY_MS = 6 * 60 * 60_000;
@@ -23,29 +23,33 @@ function gitInstalls(listing: string): string[] {
 // Asks the daemon to move each Git installation to the remote's HEAD; directory installs are left
 // alone. Detached: the update restarts this process.
 // ponytail: CLI output is dropped; `paseo plugin update <id> --check` shows what is pending.
-function update() {
-  const ls = ["plugin", "ls", "--json", ...home].map(quote);
-  execFile(cli, ls, { ...options, timeout: 30_000 }, (error, stdout) => {
-    let ids: string[];
-    try {
-      if (error) throw error;
-      ids = gitInstalls(stdout);
-    } catch (failure) {
-      return console.error(`cpa-budget: self-update check failed: ${String(failure)}`);
-    }
-    for (const id of ids) {
-      const child = spawn(cli, ["plugin", "update", id, "--yes", ...home].map(quote), { ...options, detached: true, stdio: "ignore" });
-      child.on("error", (failure) => console.error(`cpa-budget: self-update of ${id} failed: ${String(failure)}`));
-      child.unref();
-    }
-  });
-}
-
 export function scheduleUpdates(): () => void {
+  let stopped = false;
+  let listing: ChildProcess | undefined;
+  const update = () => {
+    const ls = ["plugin", "ls", "--json", ...home].map(quote);
+    listing = execFile(cli, ls, { ...options, timeout: 30_000 }, (error, stdout) => {
+      if (stopped) return;
+      let ids: string[];
+      try {
+        if (error) throw error;
+        ids = gitInstalls(stdout);
+      } catch (failure) {
+        return console.error(`cpa-budget: self-update check failed: ${String(failure)}`);
+      }
+      for (const id of ids) {
+        const child = spawn(cli, ["plugin", "update", id, "--yes", ...home].map(quote), { ...options, detached: true, stdio: "ignore" });
+        child.on("error", (failure) => console.error(`cpa-budget: self-update of ${id} failed: ${String(failure)}`));
+        child.unref();
+      }
+    });
+  };
   const first = setTimeout(update, FIRST_MS);
   const every = setInterval(update, EVERY_MS);
   return () => {
+    stopped = true;
     clearTimeout(first);
     clearInterval(every);
+    listing?.kill();
   };
 }
