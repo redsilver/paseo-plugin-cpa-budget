@@ -16,7 +16,8 @@ export type Routing = { models?: string[]; denied_models?: string[] };
 
 // A model of the server's catalog: context window and effort levels when the server tells them
 // (efforts undefined: not told; empty: a model without reasoning, stored as thinkingOptions: []).
-export type ServedModel = { id: string; created?: number; contextWindow?: number; efforts?: string[]; defaultEffort?: string };
+// name: the server's display name, for the models modelLabel cannot read (Gemini, the cloaked ids).
+export type ServedModel = { id: string; name?: string; created?: number; contextWindow?: number; efforts?: string[]; defaultEffort?: string };
 
 // Paseo knows Claude's effort levels on its own, not those of a custom Codex model: they come from
 // the server's Codex catalog, these only when it has none for the model.
@@ -28,6 +29,12 @@ export function modelsUrl(base: string): string {
   const root = base.replace(/\/+$/, "");
   return root.endsWith("/v1") ? `${root}/models` : `${root}/v1/models`;
 }
+
+// CPA lists in the Anthropic format, as claude-fable-5-dd-<id reversed>, every id that is not a
+// plain claude-…: the account-prefixed Claude ones (personale/claude-opus-5-5) get their real id
+// back, so that usable() can leave them out; the others (Gemini) keep the cloaked one CPA meant for it.
+const CLOAK = "claude-fable-5-dd-";
+export const uncloak = (id: string) => (id.startsWith(CLOAK) ? [...id.slice(CLOAK.length)].reverse().join("") : id);
 
 const baseId = (id: string) => id.slice(id.lastIndexOf("/") + 1);
 const listed = (list: string[] | undefined, id: string) =>
@@ -45,20 +52,26 @@ function effortOptions(ids: string[], defaultEffort?: string): ThinkingOption[] 
 const longContext = ({ id, contextWindow }: ServedModel) =>
   contextWindow === undefined ? !/haiku-4/i.test(id) : contextWindow >= 1_000_000;
 
-// Chat models of the family that the key may use; dated snapshots and image models left out.
+// Chat models of the family that the key may use, rotation ones only: account-prefixed ids
+// (personale/…), dated snapshots and image models left out (gpt-image-* answers only on
+// /v1/images/*). Gemini reaches Claude Code under a cloaked claude-… id.
 function usable(family: Family, id: string, routing: Routing): boolean {
+  if (id.includes("/")) return false;
   const base = baseId(id);
-  const chat = family === "claude" ? base.startsWith("claude-") : base.startsWith("gpt-") && !base.startsWith("gpt-image");
+  const chat = family === "claude" ? base.startsWith("claude-") : /^(gpt|gemini)-/.test(base) && !base.startsWith("gpt-image");
   const allowed = !routing.models?.length || listed(routing.models, id);
   return chat && !/-\d{8}$/.test(base) && allowed && !listed(routing.denied_models, id);
 }
 
-// "claude-opus-5-5[1m]" → "Opus 5.5 · 1M", "lavoro/gpt-6.1-sol" → "GPT-6.1 Sol · lavoro".
-export function modelLabel(id: string): string {
+// "claude-opus-5-5[1m]" → "Opus 5.5 · 1M", "lavoro/gpt-6.1-sol" → "GPT-6.1 Sol · lavoro";
+// the server's name, when given, in place of the one read from the id.
+export function modelLabel(id: string, served?: string): string {
   const slash = id.lastIndexOf("/");
   const base = id.slice(slash + 1).replace(/\[1m\]$/, "");
   const parts = base.replace(/^(claude|gpt)-/, "").split("-");
-  const name = base.startsWith("gpt-")
+  const name = served
+    ? served
+    : base.startsWith("gpt-")
     ? [`GPT-${parts[0]}`, ...parts.slice(1).map(cap)].join(" ")
     : [parts.filter((p) => !/^\d+$/.test(p)).map(cap).join(" "), parts.filter((p) => /^\d+$/.test(p)).join(".")].join(" ").trim();
   return [name, slash >= 0 ? id.slice(0, slash) : "", id.endsWith("[1m]") ? "1M" : ""].filter(Boolean).join(" · ");
@@ -88,10 +101,11 @@ export function syncedModels(
           : m.efforts
             ? m.efforts.length > 0 ? effortOptions(m.efforts, m.defaultEffort) : []
             : (oldEfforts ?? effortOptions(CODEX_EFFORTS));
+      const generated = (x: string) => modelLabel(x, m.name);
       return {
         ...old,
         id,
-        label: old.label && old.id && old.label !== modelLabel(old.id) ? old.label : modelLabel(id),
+        label: old.label && old.id && old.label !== generated(old.id) ? old.label : generated(id),
         ...(thinkingOptions ? { thinkingOptions } : {}),
       };
     });

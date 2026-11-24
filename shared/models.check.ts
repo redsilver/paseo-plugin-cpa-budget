@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
-import { modelLabel, modelsUrl, syncedModels } from "./models.ts";
+import { modelLabel, modelsUrl, syncedModels, uncloak } from "./models.ts";
 
 assert.equal(modelsUrl("https://cpa.example.com/api"), "https://cpa.example.com/api/v1/models");
 assert.equal(modelsUrl("https://cpa.example.com/api/v1/"), "https://cpa.example.com/api/v1/models");
 assert.equal(modelLabel("claude-opus-5-5[1m]"), "Opus 5.5 · 1M");
 assert.equal(modelLabel("lavoro/gpt-6.1-sol"), "GPT-6.1 Sol · lavoro");
 assert.equal(modelLabel("gpt-5.5"), "GPT-5.5");
+assert.equal(uncloak("claude-fable-5-dd-5-5-supo-edualc/elanosrep"), "personale/claude-opus-5-5");
+assert.equal(uncloak("claude-opus-5-5"), "claude-opus-5-5");
+assert.equal(modelLabel("claude-fable-5-dd-hgih-nobrac-4-inimeg[1m]", "Gemini 4 Carbon"), "Gemini 4 Carbon · 1M");
+
+// Gemini: in the Codex family by its id, in the Claude one under the cloaked id; the server's name as label.
+assert.deepEqual(
+  syncedModels("codex", [{ id: "gemini-4-carbon-high", name: "Gemini 4 Carbon" }, { id: "gpt-image-2.5" }], {}).map((m) => [m.id, m.label]),
+  [["gemini-4-carbon-high", "Gemini 4 Carbon"]],
+);
+assert.deepEqual(
+  syncedModels("claude", [{ id: "claude-fable-5-dd-hgih-nobrac-4-inimeg", name: "Gemini 4 Carbon", contextWindow: 1_048_576 }], {}).map((m) => [m.id, m.label]),
+  [["claude-fable-5-dd-hgih-nobrac-4-inimeg[1m]", "Gemini 4 Carbon · 1M"]],
+);
 
 const served = [
   { id: "claude-haiku-5-5", created: 30 },
@@ -28,6 +41,9 @@ assert.equal(claude[0].thinkingOptions, undefined);
 const codex = syncedModels("codex", served, rule);
 assert.deepEqual(codex.map((m) => m.id), ["gpt-6.1-sol"]);
 assert.deepEqual(codex[0].thinkingOptions?.map((o) => o.id), ["low", "medium", "high", "xhigh"]);
+
+// Rotation models only: account-prefixed ids are left out.
+assert.deepEqual(syncedModels("codex", [{ id: "gpt-6.1-sol" }, { id: "produzione/gpt-6.1-sol" }], {}).map((m) => m.id), ["gpt-6.1-sol"]);
 
 // Haiku 4.x has 200K tokens: no [1m].
 assert.deepEqual(syncedModels("claude", [{ id: "claude-haiku-4-5" }], {}).map((m) => m.id), ["claude-haiku-4-5"]);
