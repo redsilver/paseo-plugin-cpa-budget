@@ -32,7 +32,7 @@ export function modelsUrl(base: string): string {
 
 // CPA lists in the Anthropic format, as claude-fable-5-dd-<id reversed>, every id that is not a
 // plain claude-…: the account-prefixed Claude ones (personale/claude-opus-5-5) get their real id
-// back, which Claude Code takes; the others (Gemini) keep the cloaked one CPA meant for it.
+// back, so that usable() can leave them out; the others (Gemini) keep the cloaked one CPA meant for it.
 const CLOAK = "claude-fable-5-dd-";
 export const uncloak = (id: string) => (id.startsWith(CLOAK) ? [...id.slice(CLOAK.length)].reverse().join("") : id);
 
@@ -52,9 +52,11 @@ function effortOptions(ids: string[], defaultEffort?: string): ThinkingOption[] 
 const longContext = ({ id, contextWindow }: ServedModel) =>
   contextWindow === undefined ? !/haiku-4/i.test(id) : contextWindow >= 1_000_000;
 
-// Chat models of the family that the key may use; dated snapshots and image models left out
-// (gpt-image-* answers only on /v1/images/*). Gemini reaches Claude Code under a cloaked claude-… id.
+// Chat models of the family that the key may use, rotation ones only: account-prefixed ids
+// (personale/…), dated snapshots and image models left out (gpt-image-* answers only on
+// /v1/images/*). Gemini reaches Claude Code under a cloaked claude-… id.
 function usable(family: Family, id: string, routing: Routing): boolean {
+  if (id.includes("/")) return false;
   const base = baseId(id);
   const chat = family === "claude" ? base.startsWith("claude-") : /^(gpt|gemini)-/.test(base) && !base.startsWith("gpt-image");
   const allowed = !routing.models?.length || listed(routing.models, id);

@@ -42,6 +42,9 @@ const codex = syncedModels("codex", served, rule);
 assert.deepEqual(codex.map((m) => m.id), ["gpt-6.1-sol"]);
 assert.deepEqual(codex[0].thinkingOptions?.map((o) => o.id), ["low", "medium", "high", "xhigh"]);
 
+// Rotation models only: account-prefixed ids are left out.
+assert.deepEqual(syncedModels("codex", [{ id: "gpt-6.1-sol" }, { id: "produzione/gpt-6.1-sol" }], {}).map((m) => m.id), ["gpt-6.1-sol"]);
+
 // Haiku 4.x has 200K tokens: no [1m].
 assert.deepEqual(syncedModels("claude", [{ id: "claude-haiku-4-5" }], {}).map((m) => m.id), ["claude-haiku-4-5"]);
 

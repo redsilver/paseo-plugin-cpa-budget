@@ -42,9 +42,10 @@ Example provider:
 Add `"CPA_MODELS": "auto"` to a provider's `env` and the plugin replaces its `models` with what the key may use:
 
 - the server's `/v1/models`, minus the models the key's cpa-key-billing routing rule allows or denies (`/v0/resource/plugins/cpa-key-billing/routing`);
+- rotation models only: account-prefixed ids (`personale/claude-opus-5-5`, `produzione/gpt-6.1-sol`) are left out;
 - chat models of the provider's family only: `claude-*` for `extends: "claude"`, `gpt-*` and `gemini-*` for `extends: "codex"`; dated snapshots (`…-20250514`) and `gpt-image-*` (served only on `/v1/images/*`) are left out;
 - newest first; Claude models with a 1M context window (`max_input_tokens` of the Anthropic-format list) get the `[1m]` suffix (1M context in Claude Code); Codex models get the effort levels and default of the server's Codex catalog (`/v1/models?client_version=…`), `low` to `xhigh` when it has none; Paseo adds Claude's levels by itself;
-- the Anthropic-format list also carries the other models under cloaked `claude-fable-5-dd-<id reversed>` ids: the GPT ones (`owned_by: "openai"`) are left out, the account-prefixed Claude ones get their real id back (`personale/claude-opus-5-5`), the others (Gemini via Antigravity) keep the cloaked id, labelled with the server's `display_name`;
+- the Anthropic-format list also carries the other models under cloaked `claude-fable-5-dd-<id reversed>` ids: the GPT ones (`owned_by: "openai"`) are left out, the account-prefixed Claude ones get their real id back (`personale/claude-opus-5-5`) and are left out with the other prefixed ids, the others (Gemini via Antigravity) keep the cloaked id, labelled with the server's `display_name`;
 - an entry already in the list keeps its settings, also when the `[1m]` suffix comes or goes, so a hand edit survives; a generated label follows the id, and Codex effort levels follow the server whenever its catalog lists them; without a default, the newest non-Haiku model becomes it;
 - a paginated Anthropic list is not synced, rather than cut to its first page.
 
