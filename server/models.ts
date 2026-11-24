@@ -1,6 +1,6 @@
 import type { PluginHandlerContext } from "@getpaseo/plugin/server";
 import { isDeepStrictEqual } from "node:util";
-import { type Family, type ProfileModel, type ServedModel, modelsUrl, syncedModels } from "../shared/models";
+import { type Family, type ProfileModel, type ServedModel, modelsUrl, syncedModels, uncloak } from "../shared/models";
 import { cpaAccess, readProviders } from "./config";
 
 // null when the CPA has no such resource (404) or the key is not tracked by it (401).
@@ -30,7 +30,9 @@ async function servedModels(family: Family, url: string, key: string): Promise<S
       // The Anthropic list also carries the GPT models under cloaked claude-… ids.
       .filter((m: any) => m.owned_by !== "openai")
       .map((m: any) => ({
-        id: m.id,
+        id: m.owned_by === "anthropic" ? uncloak(m.id) : m.id,
+        // Gemini and the other non-Anthropic models come as claude-fable-5-dd-<id reversed>.
+        name: m.owned_by === "anthropic" ? undefined : text(m.display_name) || undefined,
         created: Date.parse(m.created_at) / 1000 || m.created,
         contextWindow: typeof m.max_input_tokens === "number" ? m.max_input_tokens : undefined,
       }));
@@ -46,6 +48,7 @@ async function servedModels(family: Family, url: string, key: string): Promise<S
     const efforts = Array.isArray(levels) ? levels.map((l: any) => text(l?.effort)).filter(Boolean) : [];
     return {
       id: m.id,
+      name: /^(claude|gpt)-/.test(m.id.slice(m.id.lastIndexOf("/") + 1)) ? undefined : text(entry?.display_name) || undefined,
       created: m.created,
       // An empty list is a model without reasoning; a list with no usable level tells nothing.
       efforts: Array.isArray(levels) && (levels.length === 0 || efforts.length > 0) ? efforts : undefined,
